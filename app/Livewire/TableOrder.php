@@ -16,10 +16,17 @@ class TableOrder extends Component
     public string $customerName = '';
     public array $cart = []; // [menu_id => quantity]
     public bool $isCartOpen = false;
+    public string $search = '';
+    public ?int $selectedCategory = null;
 
     public function mount(string $kode): void
     {
         $this->table = Table::where('code', $kode)->firstOrFail();
+    }
+
+    public function selectCategory(?int $categoryId = null): void
+    {
+        $this->selectedCategory = $categoryId;
     }
 
     public function addToCart(int $menuId): void
@@ -61,6 +68,12 @@ class TableOrder extends Component
         } else {
             $this->cart[$menuId] = min($qty, 99);
         }
+    }
+
+    public function clearCart(): void
+    {
+        $this->cart = [];
+        $this->isCartOpen = false;
     }
 
     public function toggleCartModal(): void
@@ -188,12 +201,31 @@ class TableOrder extends Component
 
     public function render()
     {
-        $categories = Category::with(['menus' => function ($query) {
-            $query->where('is_available', true)->orderBy('name');
+        $search = trim($this->search);
+        $selectedCat = $this->selectedCategory;
+
+        $categoriesQuery = Category::query();
+
+        if ($selectedCat) {
+            $categoriesQuery->where('id', $selectedCat);
+        }
+
+        $categories = $categoriesQuery->with(['menus' => function ($query) use ($search) {
+            $query->where('is_available', true);
+            if (!empty($search)) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                      ->orWhere('description', 'like', "%{$search}%");
+                });
+            }
+            $query->orderBy('name');
         }])->orderBy('id')->get();
+
+        $allCategories = Category::orderBy('id')->get();
 
         return view('livewire.table-order', [
             'categories' => $categories,
+            'allCategories' => $allCategories,
         ])->layout('components.layouts.app', [
             'table' => $this->table,
             'title' => 'Menu ' . $this->table->name . ' - Kedai Kopi Timor',
